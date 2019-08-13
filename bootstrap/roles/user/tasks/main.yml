@@ -1,0 +1,50 @@
+---
+# tasks file for user
+- name: create users
+  become: yes
+  user:
+    name: "{{ item.name }}"
+    uid: "{{ item.uid }}"
+    shell: /bin/bash
+    password: "{{ item.password|password_hash('sha512')  }}"
+    update_password: on_create
+    generate_ssh_key: yes
+  with_items: "{{ users }}"
+  when: inventory_hostname in groups['ln']
+- name: permission for home dir
+  become: yes
+  file:
+    mode: "{{ item['home_permission']|default('0700') }}"
+    state: directory
+    path: "/home/{{ item.name }}"
+    owner: "{{ item.name }}"
+  with_items: "{{ users }}"
+  when: inventory_hostname in groups['ln']
+- name: create users in cn
+  become: yes
+  user:
+    name: "{{ item.name }}"
+    uid: "{{ item.uid }}"
+    shell: /bin/bash
+    password: "{{ item.password|password_hash('sha512')  }}"
+    update_password: on_create
+    generate_ssh_key: no
+    create_home: no
+  with_items: "{{ users }}"
+  when: inventory_hostname in groups['cn']
+- name: cat ssh pubkey
+  become: yes
+  when: inventory_hostname in groups['ln']
+  command: "cat /home/{{item.name}}/.ssh/id_rsa.pub"
+  register: key
+  with_items: "{{ users }}"
+- name: authorized keys add
+  become: yes
+  authorized_key:
+    exclusive: no
+    user: "{{ item[0].name }}"
+    key: "{{ item[1].stdout }}"
+  with_nested: 
+    - "{{ users }}"
+    - "{{ key.results }}"
+  when: inventory_hostname in groups['ln']

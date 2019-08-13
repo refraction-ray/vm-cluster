@@ -1,0 +1,8 @@
+cmn*/
+cn*/
+*.img
+cluster*
+vars.sh
+all.yml
+bootstrap/host_vars/*.yml
+bootstrap/hosts

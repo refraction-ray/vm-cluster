@@ -1,0 +1,13 @@
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    {{ ansible_facts['default_ipv4']['alias'] }}:
+      addresses:
+      - {{ wan_ip|indent(1,true) }}/{{ wan_mask }}
+      gateway4: {{ wan_gateway }}
+      nameservers:
+        addresses: {{ dns_server|to_yaml }}
+    {{ lan_nic[0] }}:
+      addresses:
+       -  {{ master_ip|indent(1,true) }}/{{ mask }}

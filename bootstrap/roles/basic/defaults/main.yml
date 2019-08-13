@@ -1,0 +1,8 @@
+---
+# defaults file for basic
+nfs_dir:
+  - "/home"
+aptpacks:
+  - nfs-common
+  - ntp
+extra_mounts_bool: no
