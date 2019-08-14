@@ -1,6 +1,8 @@
 #!/bin/bash
-set -x
 
+if [ ! -z ${VM_CLUSTER_DEBUG} ];then
+    debuglevel=1
+fi
 if [ -z ${VM_CLUSTER_CONF} ]; then
     dir=$(pwd)
 else
@@ -9,10 +11,17 @@ fi
 
 source $dir/vars_default.sh
 
+debug(){
+if [ ${debuglevel} == 1 ]; then
+    echo "debug info: ${1}"
+fi
+}
+
 prepare_bridge(){
 ip link add name $1 type bridge
 ip link set $1 up
 ip addr add ${ip24}.1/24 dev $1
+debug "finish setting up bridge ${1} on host"
 }
 
 download_image(){
@@ -250,11 +259,13 @@ for i in ${vmlist[@]}
 do
     virsh destroy $i
     virsh undefine $i
-    rm -r ${dir}/${vmprefix}$i
+    rm -r ${dir}/$i
 done
 
 ip link del $br
+debug "finish cluster ${vmprefix} teardown"
 }
+
 
 if [ "$1" == "cluster-up" ]; then
     cluster_spin_up
