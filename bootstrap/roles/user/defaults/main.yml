@@ -1,6 +1,0 @@
----
-# defaults file for user
-users:
-  - name: "sxz"
-    uid: 1000
-    password: "123456"

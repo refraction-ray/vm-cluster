@@ -1,5 +1,6 @@
 #!/bin/bash
 
+debuglevel=0
 if [ ! -z ${VM_CLUSTER_DEBUG} ];then
     debuglevel=1
 fi
@@ -10,6 +11,8 @@ else
 fi
 
 source $dir/vars_default.sh
+
+cn_init=0 ## 1 when the cluster is first setup, automatically changed by the script
 
 debug(){
 if [ ${debuglevel} == 1 ]; then
@@ -55,13 +58,13 @@ genisoimage -o ${dir}/${1}/config.iso -V cidata -r -J ${dir}/${1}/meta-data ${di
 install_vm(){
 if [ $1 == 0 ]; then
     networkopt="--network network=default,mac=${macwan}" 
-    #master should has nat connection to the internet
-    specopt="-r 512" 
+    #master should has nat connection to the internet via default network in virsh
+    specopt="-r 1024" 
     #I have no attention to generalize the hardware spec settings, but you could hack there
-    resizeopt="+6G"
+    resizeopt="+5G"
 else
     networkopt=""
-    specopt="-r 512"
+    specopt="-r 1024"
     resizeopt="+2G"
 fi
 
@@ -130,8 +133,9 @@ do
         exit 1
     fi
 done
-
-ansible_bootstrap_pre $@
+if [ ${cn_init} == 0 ]; then
+    ansible_bootstrap_pre $@
+fi
 for i in $@
 do
     prepare_dir ${vmprefix}${i}
@@ -139,6 +143,26 @@ do
 done
 
 ansible_bootstrap_post $@
+}
+
+reduce_cns(){
+for i in $@
+do
+    exist=$(virsh list --all|grep ${vmprefix}${i}|wc -l)
+    if [ $exist == 0 ]; then
+        echo "compute node instance ${vmprefix}${i} doesn't exist, exiting"
+        exit 1
+    fi
+done
+for i in $@
+do
+    virsh destroy ${vmprefix}${i}
+    virsh undefine ${vmprefix}${i}
+    rm -r ${dir}/${vmprefix}${i}
+    rm ${dir}/bootstrap/host_vars/${vmprefix}${i}.yml
+    sed -i "/${vmprefix}${i}/d" ${dir}/bootstrap/hosts
+done
+cd ${dir}/bootstrap && $ansibleplaybook -i ${dir}/bootstrap/hosts ${dir}/bootstrap/site.yml --key-file "${keyfile}"
 }
 
 ansible_bootstrap_head(){
@@ -170,21 +194,15 @@ cd ${dir}/bootstrap && $ansibleplaybook -i ${dir}/bootstrap/hosts ${dir}/bootstr
 }
 
 ansible_bootstrap_pre(){
-beyond=0
 for i in $@
 do
-    if [ $i -gt ${nocn} ]; then
-        echo "${vmprefix}${i} ansible_ssh_host=${ip24}.1$(printf "%02d" ${i}) ansible_ssh_user=${muser} ansible_sudo_pass=" >>${dir}/bootstrap/hosts
+    echo "${vmprefix}${i} ansible_ssh_host=${ip24}.1$(printf "%02d" ${i}) ansible_ssh_user=${muser} ansible_sudo_pass=" >>${dir}/bootstrap/hosts
     cat << END > ${dir}/bootstrap/host_vars/${vmprefix}${i}.yml
 ip: ${ip24}.1$(printf "%02d" ${i})
 mac: ${macprefix}:$(printf "%02x" ${i}) 
 END
-    beyond=1
-    fi
 done
-if [ ${beyond} == 1 ]; then
-    cd ${dir}/bootstrap && $ansibleplaybook -i ${dir}/bootstrap/hosts -l ln ${dir}/bootstrap/site.yml --key-file "${keyfile}"
-fi
+cd ${dir}/bootstrap && $ansibleplaybook -i ${dir}/bootstrap/hosts -l ln ${dir}/bootstrap/site.yml --key-file "${keyfile}"
 }
 
 ansible_bootstrap_post(){
@@ -249,6 +267,7 @@ fi
 install_vm 0
 ansible_init
 ansible_bootstrap_head
+cn_init=1
 add_cns $(seq 1 $nocn)
 }
 
@@ -260,6 +279,7 @@ do
     virsh destroy $i
     virsh undefine $i
     rm -r ${dir}/$i
+    rm ${dir}/bootstrap/host_vars/${i}.yml
 done
 
 ip link del $br
@@ -273,6 +293,8 @@ elif [ "$1" == "cluster-down" ]; then
     cluster_tear_down
 elif [ "$1" == "nodes-add" ]; then
     add_cns ${@:2}
+elif [ "$1" == "nodes-del" ]; then
+    reduce_cns ${@:2}
 else
     echo "unrecognized action, exiting..."
     exit 4

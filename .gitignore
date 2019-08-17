@@ -1,4 +1,7 @@
 cmn*/
+bootstrap/roles/slurm/defaults/main.yml
+bootstrap/roles/user/defaults/main.yml
+prem*/
 ._*
 cn*/
 *.img
